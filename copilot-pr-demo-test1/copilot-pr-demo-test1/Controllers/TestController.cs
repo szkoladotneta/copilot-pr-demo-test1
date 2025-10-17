@@ -1,4 +1,5 @@
 using copilot_pr_demo_test1.Infrastructure;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace copilot_pr_demo_test1.Controllers;
@@ -18,6 +19,7 @@ public class TestController : ControllerBase
     // Issue 2: Synchronous operation
     // Issue 3: No error handling
     // Issue 4: Returns entities instead of DTOs
+    [Authorize]
     [HttpGet]
     public IActionResult GetUsers()
     {
