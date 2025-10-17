@@ -608,7 +608,8 @@ For each PR, verify:
 
 ### Indicators of Progress
 
-**PR #1 (Day 1):**
+**PR #1 (Day 1) — First-Time Contributor / Junior Developer:**  
+*(See "First-Time Contributors / Junior Developers" section above for detailed expectations.)*
 - Expected: 10-15 issues across all severities
 - Focus: Critical and high-priority only
 
