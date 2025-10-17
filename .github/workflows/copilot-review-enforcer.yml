@@ -1,79 +1,218 @@
 name: Copilot Review Enforcer
 
 on:
-  pull_request:
-    types: [opened, synchronize, reopened]
   pull_request_review_comment:
     types: [created, edited]
+  issue_comment:
+    types: [created, edited]
+  pull_request_review:
+    types: [submitted]
+  # Run manually or on schedule to check status
+  workflow_dispatch:
 
 permissions:
   contents: read
   pull-requests: write
-  issues: read
+  issues: write
+  checks: write
 
 jobs:
-  enforce-copilot-review:
-    name: Check Copilot Review Status
+  wait-for-copilot:
+    name: Wait for Copilot Review
     runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request_review_comment' || github.event_name == 'issue_comment'
     
     steps:
-      - name: Check for Copilot Critical Issues
+      - name: Check if comment is from Copilot
+        id: check-copilot
         uses: actions/github-script@v7
         with:
           script: |
-            const { data: comments } = await github.rest.pulls.listReviewComments({
+            const commentUser = context.payload.comment.user.login;
+            const isCopilot = commentUser.toLowerCase().includes('copilot');
+            
+            console.log(`Comment from: ${commentUser}`);
+            console.log(`Is Copilot: ${isCopilot}`);
+            
+            return isCopilot;
+
+      - name: Get PR number
+        if: steps.check-copilot.outputs.result == 'true'
+        id: pr
+        uses: actions/github-script@v7
+        with:
+          script: |
+            if (context.payload.issue) {
+              return context.payload.issue.number;
+            } else if (context.payload.pull_request) {
+              return context.payload.pull_request.number;
+            }
+            return null;
+
+      - name: Analyze Copilot Review
+        if: steps.check-copilot.outputs.result == 'true' && steps.pr.outputs.result != 'null'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prNumber = ${{ steps.pr.outputs.result }};
+            
+            // Get all comments
+            const { data: reviewComments } = await github.rest.pulls.listReviewComments({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              pull_number: context.issue.number,
+              pull_number: prNumber,
             });
             
             const { data: issueComments } = await github.rest.issues.listComments({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              issue_number: context.issue.number,
+              issue_number: prNumber,
             });
             
-            // Check for Copilot comments with critical issues
-            const copilotComments = [...comments, ...issueComments].filter(c => 
-              c.user.login === 'copilot' || 
-              c.body.includes('🔴') || 
-              c.body.includes('Critical')
+            const allComments = [...reviewComments, ...issueComments];
+            
+            // Filter Copilot comments
+            const copilotComments = allComments.filter(c => 
+              c.user.login.toLowerCase().includes('copilot')
             );
             
-            console.log(`Found ${copilotComments.length} Copilot-related comments`);
+            console.log(`Total Copilot comments: ${copilotComments.length}`);
             
-            // Check for critical issues
-            const criticalIssues = copilotComments.filter(c => 
-              c.body.includes('🔴') || 
-              c.body.toLowerCase().includes('critical')
-            );
+            // Analyze severity - look for keywords since emojis may not be present
+            let criticalCount = 0;
+            let highCount = 0;
+            let suggestionsCount = 0;
             
-            if (criticalIssues.length > 0) {
-              console.log(`❌ Found ${criticalIssues.length} critical issues from Copilot`);
+            const criticalKeywords = [
+              'critical', 'security', 'vulnerability', 'sql injection', 
+              'xss', 'hardcoded', 'password', 'secret', 'authorization',
+              'authentication', 'injection', '🔴'
+            ];
+            
+            const highKeywords = [
+              'async', 'await', 'performance', 'blocking', 'thread',
+              'synchronous', 'n+1', 'error handling', 'validation',
+              'null check', '🟠'
+            ];
+            
+            copilotComments.forEach(comment => {
+              const body = comment.body.toLowerCase();
               
-              await github.rest.issues.createComment({
+              // Check for critical issues
+              if (criticalKeywords.some(keyword => body.includes(keyword))) {
+                criticalCount++;
+                console.log(`Critical issue found: ${comment.html_url}`);
+              } 
+              // Check for high priority
+              else if (highKeywords.some(keyword => body.includes(keyword))) {
+                highCount++;
+                console.log(`High priority issue found: ${comment.html_url}`);
+              }
+              else {
+                suggestionsCount++;
+              }
+            });
+            
+            console.log(`Critical: ${criticalCount}, High: ${highCount}, Suggestions: ${suggestionsCount}`);
+            
+            // Create comprehensive status message
+            const statusIcon = criticalCount > 0 ? '❌' : highCount > 5 ? '⚠️' : '✅';
+            const statusText = criticalCount > 0 ? 'BLOCKED' : highCount > 5 ? 'REVIEW NEEDED' : 'APPROVED';
+            
+            const statusMessage = `## ${statusIcon} Copilot Review Status: ${statusText}
+            
+            **Review Summary:**
+            - 🔴 **Critical Issues:** ${criticalCount} ${criticalCount > 0 ? '(MUST FIX)' : ''}
+            - 🟠 **High Priority:** ${highCount} ${highCount > 5 ? '(Should address)' : ''}
+            - 💡 **Suggestions:** ${suggestionsCount}
+            - 📊 **Total Comments:** ${copilotComments.length}
+            
+            ${criticalCount > 0 ? `
+            ### ❌ Merge Blocked
+            
+            This PR has **${criticalCount} critical issue(s)** that must be resolved:
+            - Security vulnerabilities
+            - Missing authorization/authentication
+            - Data integrity risks
+            
+            **Action Required:** Fix all critical issues before requesting human review.
+            ` : highCount > 5 ? `
+            ### ⚠️ Review Recommended
+            
+            This PR has ${highCount} high-priority issues. While not blocking, these should be addressed:
+            - Async/await usage
+            - Error handling
+            - Input validation
+            - Performance concerns
+            
+            **Recommendation:** Address high-priority items or document why they can be deferred.
+            ` : `
+            ### ✅ Copilot Review Passed
+            
+            No critical issues detected. ${copilotComments.length > 0 ? `Copilot provided ${copilotComments.length} suggestion(s) for improvement.` : ''}
+            
+            **Ready for human review!**
+            `}
+            
+            ---
+            
+            <details>
+            <summary>📋 Review Guidelines</summary>
+            
+            **Critical (🔴) - Must Fix:**
+            - Security vulnerabilities
+            - SQL injection risks
+            - Missing authorization
+            - Hardcoded secrets
+            - Data loss scenarios
+            
+            **High Priority (🟠) - Should Fix:**
+            - Async/await missing
+            - No error handling
+            - Missing validation
+            - Performance issues
+            
+            **Suggestions (💡) - Consider:**
+            - Code style
+            - Documentation
+            - Refactoring opportunities
+            
+            </details>
+            `;
+            
+            // Find and update or create status comment
+            const { data: existingComments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+            });
+            
+            const statusComment = existingComments.find(c => 
+              c.user.login === 'github-actions[bot]' && 
+              c.body.includes('Copilot Review Status')
+            );
+            
+            if (statusComment) {
+              await github.rest.issues.updateComment({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                issue_number: context.issue.number,
-                body: `## ❌ Copilot Review: Critical Issues Found\n\n` +
-                      `Copilot identified **${criticalIssues.length} critical issue(s)** that must be resolved before merging.\n\n` +
-                      `Please review the inline comments from @copilot and fix all 🔴 critical issues.\n\n` +
-                      `### Critical Issues:\n` +
-                      criticalIssues.slice(0, 5).map((c, i) => 
-                        `${i + 1}. [Comment link](${c.html_url})`
-                      ).join('\n')
+                comment_id: statusComment.id,
+                body: statusMessage
               });
-              
-              core.setFailed(`${criticalIssues.length} critical issue(s) found by Copilot. Fix before merging.`);
+              console.log('Updated existing status comment');
             } else {
-              console.log('✅ No critical issues found by Copilot');
-              
               await github.rest.issues.createComment({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                issue_number: context.issue.number,
-                body: `## ✅ Copilot Review: No Critical Issues\n\n` +
-                      `Copilot review completed. No critical issues detected.\n\n` +
-                      `${copilotComments.length > 0 ? `Note: ${copilotComments.length} suggestion(s) provided for improvement.` : ''}`
+                issue_number: prNumber,
+                body: statusMessage
               });
+              console.log('Created new status comment');
+            }
+            
+            // Set job status based on critical issues
+            if (criticalCount > 0) {
+              core.setFailed(`❌ ${criticalCount} critical issue(s) must be resolved before merging.`);
+            } else {
+              console.log(`✅ No critical issues. High: ${highCount}, Suggestions: ${suggestionsCount}`);
             }
