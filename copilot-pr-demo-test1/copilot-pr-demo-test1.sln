@@ -1,6 +1,6 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "copilot-pr-demo-test1", "copilot-pr-demo-test1\copilot-pr-demo-test1.csproj", "{250BF821-AB9E-47B9-A910-276CCD55C490}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "copilot-pr-demo-test1", "copilot-pr-demo-test1\copilot-pr-demo-test1.csproj", "{765E394D-C4C3-48C7-8268-73D1BE650FBF}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -8,9 +8,9 @@ Global
 		Release|Any CPU = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
-		{250BF821-AB9E-47B9-A910-276CCD55C490}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{250BF821-AB9E-47B9-A910-276CCD55C490}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{250BF821-AB9E-47B9-A910-276CCD55C490}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{250BF821-AB9E-47B9-A910-276CCD55C490}.Release|Any CPU.Build.0 = Release|Any CPU
+		{765E394D-C4C3-48C7-8268-73D1BE650FBF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{765E394D-C4C3-48C7-8268-73D1BE650FBF}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{765E394D-C4C3-48C7-8268-73D1BE650FBF}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{765E394D-C4C3-48C7-8268-73D1BE650FBF}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal
