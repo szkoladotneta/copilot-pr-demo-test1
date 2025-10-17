@@ -77,7 +77,7 @@ public async Task<ActionResult<List<UserDto>>> GetUsers()
 ```
 
 **Learn more:**
-- [Microsoft: Async/await best practices](https://docs.microsoft.com/aspnet/core/fundamentals/best-practices)
+- [Microsoft Learn: Async and Await in C#](https://learn.microsoft.com/dotnet/csharp/asynchronous-programming/async-and-await)
 - [Stephen Cleary: There Is No Thread](https://blog.stephencleary.com/2013/11/there-is-no-thread.html)
 - [Why async/await matters in ASP.NET Core](https://learn.microsoft.com/en-us/aspnet/core/performance/performance-best-practices)
 
