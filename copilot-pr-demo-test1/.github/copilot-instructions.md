@@ -473,9 +473,6 @@ This reduces to a single query with a SQL JOIN.
 
 **❌ Bad (Not Educational):**
 
-Missing async/await. Fix this.
-
-
 **✅ Good (Educational):**
 
 🟠 High Priority: Missing Async/Await
