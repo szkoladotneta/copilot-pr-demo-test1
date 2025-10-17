@@ -9,7 +9,10 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="6fa1f06a-6e4c-4e7b-954e-7a075045e4a0" name="Changes" comment="">
-      <change afterPath="$PROJECT_DIR$/.github/copilot-instructions.md" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/copilot-pr-demo-test1/Infrastructure/ApplicationDbContext.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/.idea.copilot-pr-demo-test1/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/.idea.copilot-pr-demo-test1/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/copilot-pr-demo-test1/Controllers/UserController.cs" beforeDir="false" afterPath="$PROJECT_DIR$/copilot-pr-demo-test1/Controllers/UserController.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/copilot-pr-demo-test1/copilot-pr-demo-test1.csproj" beforeDir="false" afterPath="$PROJECT_DIR$/copilot-pr-demo-test1/copilot-pr-demo-test1.csproj" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -17,6 +20,11 @@
     <option name="LAST_RESOLUTION" value="IGNORE" />
   </component>
   <component name="Git.Settings">
+    <option name="RECENT_BRANCH_BY_REPOSITORY">
+      <map>
+        <entry key="$PROJECT_DIR$/.." value="main" />
+      </map>
+    </option>
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$/.." />
   </component>
   <component name="GitHubPullRequestSearchHistory"><![CDATA[{
@@ -32,8 +40,11 @@
   }
 }]]></component>
   <component name="HighlightingSettingsPerFile">
+    <setting file="file://$PROJECT_DIR$/copilot-pr-demo-test1/Controllers/UserController.cs" root0="FORCE_HIGHLIGHTING" />
+    <setting file="file://$PROJECT_DIR$/copilot-pr-demo-test1/Infrastructure/ApplicationDbContext.cs" root0="FORCE_HIGHLIGHTING" />
     <setting file="file://$PROJECT_DIR$/copilot-pr-demo-test1/Models/Order.cs" root0="FORCE_HIGHLIGHTING" />
     <setting file="file://$PROJECT_DIR$/copilot-pr-demo-test1/Models/User.cs" root0="FORCE_HIGHLIGHTING" />
+    <setting file="file://$PROJECT_DIR$/copilot-pr-demo-test1/Services/OrderService.cs" root0="FORCE_HIGHLIGHTING" />
   </component>
   <component name="MetaFilesCheckinStateConfiguration" checkMetaFiles="true" />
   <component name="ProjectColorInfo"><![CDATA[{
@@ -49,7 +60,7 @@
     "ModuleVcsDetector.initialDetectionPerformed": "true",
     "RunOnceActivity.ShowReadmeOnStart": "true",
     "RunOnceActivity.git.unshallow": "true",
-    "git-widget-placeholder": "main",
+    "git-widget-placeholder": "feature/add-user-api",
     "node.js.detected.package.eslint": "true",
     "node.js.detected.package.tslint": "true",
     "node.js.selected.package.eslint": "(autodetect)",
@@ -100,7 +111,7 @@
       <option name="number" value="Default" />
       <option name="presentableId" value="Default" />
       <updated>1760692224124</updated>
-      <workItem from="1760692225281" duration="723000" />
+      <workItem from="1760692225281" duration="2374000" />
     </task>
     <task id="LOCAL-00001" summary="Initial with first models">
       <option name="closed" value="true" />
@@ -110,7 +121,23 @@
       <option name="project" value="LOCAL" />
       <updated>1760692293148</updated>
     </task>
-    <option name="localTasksCounter" value="2" />
+    <task id="LOCAL-00002" summary="add copilot-instructions.md for reviews.">
+      <option name="closed" value="true" />
+      <created>1760694527979</created>
+      <option name="number" value="00002" />
+      <option name="presentableId" value="LOCAL-00002" />
+      <option name="project" value="LOCAL" />
+      <updated>1760694527979</updated>
+    </task>
+    <task id="LOCAL-00003" summary="Added OrderService and User Controller">
+      <option name="closed" value="true" />
+      <created>1760694972496</created>
+      <option name="number" value="00003" />
+      <option name="presentableId" value="LOCAL-00003" />
+      <option name="project" value="LOCAL" />
+      <updated>1760694972496</updated>
+    </task>
+    <option name="localTasksCounter" value="4" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -121,7 +148,9 @@
   <component name="VcsManagerConfiguration">
     <option name="CLEAR_INITIAL_COMMIT_MESSAGE" value="true" />
     <MESSAGE value="Initial with first models" />
-    <option name="LAST_COMMIT_MESSAGE" value="Initial with first models" />
+    <MESSAGE value="add copilot-instructions.md for reviews." />
+    <MESSAGE value="Added OrderService and User Controller" />
+    <option name="LAST_COMMIT_MESSAGE" value="Added OrderService and User Controller" />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>
