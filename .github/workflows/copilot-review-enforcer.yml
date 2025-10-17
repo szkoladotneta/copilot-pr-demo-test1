@@ -1,0 +1,79 @@
+name: Copilot Review Enforcer
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  pull_request_review_comment:
+    types: [created, edited]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: read
+
+jobs:
+  enforce-copilot-review:
+    name: Check Copilot Review Status
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Check for Copilot Critical Issues
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data: comments } = await github.rest.pulls.listReviewComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number,
+            });
+            
+            const { data: issueComments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            
+            // Check for Copilot comments with critical issues
+            const copilotComments = [...comments, ...issueComments].filter(c => 
+              c.user.login === 'copilot' || 
+              c.body.includes('🔴') || 
+              c.body.includes('Critical')
+            );
+            
+            console.log(`Found ${copilotComments.length} Copilot-related comments`);
+            
+            // Check for critical issues
+            const criticalIssues = copilotComments.filter(c => 
+              c.body.includes('🔴') || 
+              c.body.toLowerCase().includes('critical')
+            );
+            
+            if (criticalIssues.length > 0) {
+              console.log(`❌ Found ${criticalIssues.length} critical issues from Copilot`);
+              
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: `## ❌ Copilot Review: Critical Issues Found\n\n` +
+                      `Copilot identified **${criticalIssues.length} critical issue(s)** that must be resolved before merging.\n\n` +
+                      `Please review the inline comments from @copilot and fix all 🔴 critical issues.\n\n` +
+                      `### Critical Issues:\n` +
+                      criticalIssues.slice(0, 5).map((c, i) => 
+                        `${i + 1}. [Comment link](${c.html_url})`
+                      ).join('\n')
+              });
+              
+              core.setFailed(`${criticalIssues.length} critical issue(s) found by Copilot. Fix before merging.`);
+            } else {
+              console.log('✅ No critical issues found by Copilot');
+              
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: `## ✅ Copilot Review: No Critical Issues\n\n` +
+                      `Copilot review completed. No critical issues detected.\n\n` +
+                      `${copilotComments.length > 0 ? `Note: ${copilotComments.length} suggestion(s) provided for improvement.` : ''}`
+              });
+            }
