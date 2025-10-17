@@ -688,7 +688,7 @@ Would you like me to share a checklist for your future PRs?
 
 **Good news:**
 Your error handling has been excellent in the last 3 PRs - you've clearly 
-internalized that pattern! 👏
+internalized that pattern! [applause]
 
 ---
 
