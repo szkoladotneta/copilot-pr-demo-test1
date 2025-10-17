@@ -8,12 +8,12 @@ namespace copilot_pr_demo_test1.Controllers;
 public class TestController : ControllerBase
 {
     private readonly ApplicationDbContext _context;
-    
+
     public TestController(ApplicationDbContext context)
     {
         _context = context;
     }
-    
+
     // Issue 1: No authorization
     // Issue 2: Synchronous operation
     // Issue 3: No error handling
@@ -24,7 +24,7 @@ public class TestController : ControllerBase
         var users = _context.Users.ToList();
         return Ok(users);
     }
-    
+
     // Issue 5: SQL Injection
     // Issue 6: No async
     // Issue 7: Hardcoded connection string
@@ -36,7 +36,7 @@ public class TestController : ControllerBase
         // Execute query...
         return Ok();
     }
-    
+
     // Issue 8: No validation
     // Issue 9: No null check
     // Issue 10: Wrong status code
