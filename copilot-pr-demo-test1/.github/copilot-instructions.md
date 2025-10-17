@@ -17,6 +17,10 @@
 
 🔴/🟠/🟡 **[Severity]: [Issue Title]**
 
+**Severity Legend:**  
+- 🔴 Critical / Block PR  
+- 🟠 High Priority  
+- 🟡 Medium Priority  
 **What's happening:**
 [Explain the current code behavior in simple terms]
 
