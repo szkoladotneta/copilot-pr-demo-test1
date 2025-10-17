@@ -29,10 +29,10 @@ jobs:
           dotnet-version: '8.0.x'
 
       - name: Restore dependencies
-        run: dotnet restore src/OrderApi/OrderApi.csproj
+        run: dotnet restore copilot-pr-demo-test1/copilot-pr-demo-test1.csproj
 
       - name: Build
-        run: dotnet build src/OrderApi/OrderApi.csproj --no-restore
+        run: dotnet build copilot-pr-demo-test1/copilot-pr-demo-test1.csproj --no-restore
 
       - name: Run Copilot Review
         id: copilot-review
@@ -87,7 +87,7 @@ jobs:
       - name: Run Security Scan
         uses: security-code-scan/security-code-scan-action@v1
         with:
-          project: src/OrderApi/OrderApi.csproj
+          project: copilot-pr-demo-test1/copilot-pr-demo-test1.csproj
           
       - name: Upload Results
         uses: github/codeql-action/upload-sarif@v2
@@ -110,10 +110,10 @@ jobs:
       - name: Run Code Analysis
         run: |
           dotnet tool install --global dotnet-format
-          dotnet format src/OrderApi/OrderApi.csproj --verify-no-changes --severity error
+          dotnet format copilot-pr-demo-test1/copilot-pr-demo-test1.csproj --verify-no-changes --severity error
 
       - name: Run Tests
-        run: dotnet test src/OrderApi.Tests/OrderApi.Tests.csproj --logger "trx;LogFileName=test-results.trx"
+        run: dotnet test copilot-pr-demo-test1.Tests/copilot-pr-demo-test1.Tests.csproj --logger "trx;LogFileName=test-results.trx"
 
       - name: Publish Test Results
         if: always()
