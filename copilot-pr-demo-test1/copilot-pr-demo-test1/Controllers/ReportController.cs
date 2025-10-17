@@ -22,23 +22,24 @@ public class ReportController : ControllerBase
         var connStr = _config.GetConnectionString("DefaultConnection");
         var conn = new SqlConnection(connStr);
         conn.Open();
-        
+
         // VIOLATION: SQL Injection
         var query = $"SELECT * FROM Sales WHERE Date >= '{startDate}' AND Date <= '{endDate}'";
         var cmd = new SqlCommand(query, conn);
-        
+
         // VIOLATION: Not async
         var reader = cmd.ExecuteReader();
         var results = new List<object>();
-        
+
         while (reader.Read())
         {
-            results.Add(new {
+            results.Add(new
+            {
                 date = reader["Date"],
                 amount = reader["Amount"]
             });
         }
-        
+
         // VIOLATION: Not disposing resources
         return Ok(results);
     }

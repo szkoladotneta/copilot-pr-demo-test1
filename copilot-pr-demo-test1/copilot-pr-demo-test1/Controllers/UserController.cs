@@ -67,7 +67,7 @@ public class UserController : ControllerBase
     [HttpPost("login")]
     public async Task<ActionResult<LoginResult>> Login([FromBody] LoginRequest request)
     {
-        if (string.IsNullOrWhiteSpace(request.Username) || 
+        if (string.IsNullOrWhiteSpace(request.Username) ||
             string.IsNullOrWhiteSpace(request.Password))
         {
             return BadRequest("Username and password required");
@@ -116,7 +116,7 @@ public class UserController : ControllerBase
         try
         {
             var user = await _context.Users.FindAsync(id);
-            
+
             if (user == null)
             {
                 return NotFound();
@@ -125,7 +125,7 @@ public class UserController : ControllerBase
             _context.Users.Remove(user);
             await _context.SaveChangesAsync();
 
-            _logger.LogInformation("User {UserId} deleted by {AdminUser}", 
+            _logger.LogInformation("User {UserId} deleted by {AdminUser}",
                 id, User.Identity?.Name);
 
             return NoContent();
