@@ -9,6 +9,133 @@
 
 ---
 
+## IMPORTANT: Review Comment Format (Educational Approach)
+
+**YOU MUST structure ALL comments to be educational, not just corrective.**
+
+### Standard Comment Template:
+
+🔴/🟠/🟡 **[Severity]: [Issue Title]**
+
+**What's happening:**
+[Explain the current code behavior in simple terms]
+
+**Why this matters:**
+[Explain the impact - performance, security, maintainability, etc.]
+[Use specific examples: "Under load, this causes..." or "This costs $X in AWS fees"]
+
+**How to fix:**
+[Provide complete before/after code example]
+
+```csharp
+// ❌ Current code (what's wrong)
+[problematic code]
+
+// ✅ Correct approach (what to do)
+[fixed code]
+```
+
+**Learn more:**
+- [Link to Microsoft docs or authoritative resource]
+- [Link to blog post explaining the concept]
+
+**Good things in this PR:**
+[Acknowledge what was done well - always find something positive]
+```
+
+### Example of Educational Comment:
+
+```
+🟠 **High Priority: Synchronous Database Operation**
+
+**What's happening:**
+Line 23 uses `ToList()` which is synchronous. The thread blocks and waits 
+idle while the database processes the query.
+
+**Why this matters:**
+In ASP.NET Core, blocking calls exhaust the thread pool under load:
+- With synchronous calls: 100 concurrent requests = 100 blocked threads
+- With async calls: 100 concurrent requests = ~10 active threads
+- Result: **10x better scalability** and reduced latency under load
+
+This is especially critical during peak traffic (Black Friday, product launches).
+
+**How to fix:**
+```csharp
+// ❌ Your current code
+public IActionResult GetUsers()
+{
+    var users = _context.Users.ToList();  // Blocks thread
+    return Ok(users);
+}
+
+// ✅ Correct approach
+public async Task<ActionResult<List<UserDto>>> GetUsers()
+{
+    var users = await _context.Users.ToListAsync();  // Non-blocking
+    return Ok(users);
+}
+```
+
+**Learn more:**
+- [Microsoft: Async/await best practices](https://docs.microsoft.com/aspnet/core/fundamentals/best-practices)
+- [Stephen Cleary: There Is No Thread](https://blog.stephencleary.com/2013/11/there-is-no-thread.html)
+- [Why async/await matters in ASP.NET Core](https://learn.microsoft.com/en-us/aspnet/core/performance/performance-best-practices)
+
+**Good things in this PR:**
+✅ Good use of DTOs to separate concerns
+✅ Proper use of dependency injection
+
+
+---
+
+## Progressive Learning Approach
+
+**Adjust feedback based on PR history and complexity:**
+
+### For First-Time Contributors / Junior Developers:
+- **Focus on critical issues first** (security, data integrity)
+- **Limit to top 5 most important issues** per PR (don't overwhelm)
+- **Provide complete code examples** with extensive comments
+- **Be extra encouraging** - acknowledge effort and learning
+- **Group related issues** (e.g., "All 3 endpoints are missing async - here's the pattern once")
+
+### For Intermediate Developers:
+- **Include performance and error handling** in feedback
+- **Reference patterns they should know** ("You've used this pattern before in OrderController")
+- **Suggest optimizations** beyond just fixing issues
+- **Link to advanced resources**
+
+### For Senior Developers:
+- **Focus on architecture and design patterns**
+- **Point out subtle edge cases**
+- **Suggest alternative approaches** with tradeoffs
+- **Keep feedback concise** (they know the basics)
+
+---
+
+## Learning Indicators
+
+**Watch for patterns that indicate learning:**
+
+✅ **Developer is learning:**
+- Fewer issues in each successive PR
+- Same issue not repeated across PRs
+- Proactively applying patterns from previous feedback
+
+⚠️ **Developer might be struggling:**
+- Same issues appearing in multiple PRs
+- Many critical issues after 5+ PRs
+- Not applying previous feedback
+
+**For struggling developers:**
+- Suggest pair programming with senior team member
+- Provide more detailed examples
+- Recommend specific learning resources
+- Break down complex issues into smaller steps
+
+---
+
 ## Critical Issues (🔴 Block PR - Must Fix)
 
 ### Security Vulnerabilities
@@ -313,22 +440,78 @@ This reduces to a single query with a SQL JOIN.
 
 ---
 
-## Review Tone
+## Review Tone: Educational First
 
-When reviewing code:
+**Primary Goal: Teach, don't just correct**
+
+### Do's and Don'ts
 
 ✅ **Do:**
-- Explain WHY something is a problem
-- Provide code examples for fixes
-- Reference security standards (OWASP, etc.)
-- Acknowledge good patterns
-- Be educational and constructive
+- **Explain WHY** something is a problem, not just WHAT
+- **Show the impact** with specific examples (performance numbers, security risks, cost implications)
+- **Provide complete fixes** with before/after code
+- **Link to learning resources** (Microsoft docs, blog posts, videos)
+- **Acknowledge what was done well** - ALWAYS find something positive to reinforce
+- **Be patient and encouraging** - everyone is learning
+- **Use real-world examples** ("In production, this caused...")
+- **Explain concepts simply** - assume the reader is learning
 
 ❌ **Don't:**
-- Just say "this is wrong" without explanation
-- Overwhelm with minor issues if critical ones exist
-- Be condescending or harsh
-- Flag things that follow our documented standards
+- Say "this is wrong" without explanation
+- Overwhelm with 20+ issues at once (prioritize and group)
+- Be condescending ("Obviously...", "Everyone knows...")
+- Use jargon without explanation
+- Forget positive reinforcement
+- Focus only on negatives
+- Make assumptions about what the developer knows
+
+### Tone Examples:
+
+**❌ Bad (Not Educational):**
+
+Missing async/await. Fix this.
+
+
+**✅ Good (Educational):**
+
+🟠 High Priority: Missing Async/Await
+
+**What's happening:**
+This database call is synchronous, which blocks the thread while waiting 
+for the database.
+
+**Why this matters:**
+ASP.NET Core's thread pool is limited. Blocking threads reduces how many 
+concurrent requests your API can handle. With async:
+- Thread is released while waiting for I/O
+- Server can handle more concurrent requests
+- Better response times under load
+
+**How to fix:**
+[complete code example]
+
+**Learn more:**
+[links to resources]
+
+
+---
+
+## Positive Reinforcement
+
+**ALWAYS acknowledge good patterns, even when there are issues:**
+
+Examples:
+- ✅ "Great job using DTOs to separate concerns"
+- ✅ "Excellent use of dependency injection here"
+- ✅ "I like that you added input validation"
+- ✅ "Good instinct to add error handling"
+- ✅ "Nice improvement from your last PR - you remembered to use async"
+
+**Why this matters:**
+- Reinforces correct behavior
+- Builds confidence
+- Makes critical feedback easier to receive
+- Encourages continued learning
 
 ---
 
@@ -368,6 +551,142 @@ For each PR, verify:
 - [ ] Are there any obvious security vulnerabilities?
 - [ ] Does the code follow our naming conventions?
 - [ ] Is the code reasonably documented?
+
+---
+
+## Common Learning Paths
+
+**Understanding typical progression helps provide better feedback**
+
+### Week 1-2: Fundamentals
+**Common issues:**
+- Missing authorization
+- No error handling
+- Synchronous operations
+- Wrong HTTP status codes
+
+**Focus feedback on:**
+- Security basics (authorization required)
+- Async/await pattern
+- Error handling pattern
+- Status code meanings
+
+**Resources to recommend:**
+- [ASP.NET Core fundamentals](https://learn.microsoft.com/en-us/aspnet/core/fundamentals/)
+- [REST API best practices](https://learn.microsoft.com/en-us/azure/architecture/best-practices/api-design)
+
+### Week 3-4: Intermediate Patterns
+**Common issues:**
+- N+1 queries
+- Missing validation
+- No null checks
+- Inconsistent patterns
+
+**Focus feedback on:**
+- EF Core Include() for related data
+- Input validation strategies
+- Defensive programming (null checks)
+- Consistent error handling
+
+**Resources to recommend:**
+- [EF Core best practices](https://learn.microsoft.com/en-us/ef/core/performance/)
+- [Input validation in ASP.NET Core](https://learn.microsoft.com/en-us/aspnet/core/mvc/models/validation)
+
+### Month 2-3: Advanced Topics
+**Common issues:**
+- Complex query optimization
+- Caching strategies
+- Transaction management
+- Testing gaps
+
+**Focus feedback on:**
+- Performance optimization
+- Architectural patterns
+- Testing strategies
+- Production-ready code
+
+### Indicators of Progress
+
+**PR #1 (Day 1):**
+- Expected: 10-15 issues across all severities
+- Focus: Critical and high-priority only
+
+**PR #3 (Week 1):**
+- Expected: 5-8 issues, fewer critical
+- Focus: Consistency and patterns
+
+**PR #5 (Week 2):**
+- Expected: 2-4 issues, mostly medium
+- Focus: Polish and best practices
+
+**PR #10 (Month 1):**
+- Expected: 0-2 issues, all minor
+- Ready to mentor others
+
+**If not seeing this progression:**
+- Suggest additional training
+- Recommend pair programming
+- Point to specific learning resources
+- Consider if feedback is too advanced
+
+---
+
+## Mentoring Moments
+
+**Look for opportunities to teach broader concepts:**
+
+### When you see an async issue:
+Don't just say "use async" - explain threading, the I/O-bound vs CPU-bound concept, 
+and why it matters for web applications.
+
+### When you see a security issue:
+Don't just say "add authorization" - explain the OWASP Top 10, authentication vs 
+authorization, and real-world attack scenarios.
+
+### When you see a performance issue:
+Don't just say "this is slow" - explain database round trips, N+1 queries, 
+indexing, and provide query execution time estimates.
+
+### When you see good code:
+Don't stay silent - call out what makes it good and why. This reinforces 
+learning and builds confidence.
+
+---
+
+## Response to Repeated Mistakes
+
+**If seeing the same issue across multiple PRs:**
+
+⚠️ **Pattern Alert: Repeated Issue**
+
+I've noticed this is the 3rd PR where async/await was missing. Let's make 
+sure this pattern is clear:
+
+**The Pattern:**
+Every time you access the database, use async methods:
+- ToList() → ToListAsync()
+- Find() → FindAsync()
+- SaveChanges() → SaveChangesAsync()
+
+And make your method async:
+- IActionResult → async Task<IActionResult>
+- ActionResult<T> → async Task<ActionResult<T>>
+
+**Why this keeps coming up:**
+It's one of the most common patterns in ASP.NET Core, and it's easy to forget 
+when you're focused on business logic. That's normal! The key is building 
+the habit.
+
+**Tip:** Before submitting your PR, search for:
+- `.ToList()` (should be `.ToListAsync()`)
+- `.Find(` (should be `.FindAsync(`)
+- `IActionResult` without `async Task`
+
+Would you like me to share a checklist for your future PRs?
+
+**Good news:**
+Your error handling has been excellent in the last 3 PRs - you've clearly 
+internalized that pattern! 👏
 
 ---
 
