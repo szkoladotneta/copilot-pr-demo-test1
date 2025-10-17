@@ -2,95 +2,142 @@ name: PR Quality Gate
 
 on:
   pull_request:
-    types: [opened, synchronize]
+    types: [opened, synchronize, reopened]
 
 permissions:
   contents: read
   pull-requests: write
-  statuses: write
+  issues: write
 
 jobs:
-  quality-gate:
-    name: Enforce Quality Standards
+  pr-validation:
+    name: Validate PR Requirements
     runs-on: ubuntu-latest
     
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: Check PR Title
-        run: |
-          PR_TITLE="${{ github.event.pull_request.title }}"
-          if [[ ! $PR_TITLE =~ ^(feat|fix|docs|refactor|test|chore): ]]; then
-            echo "❌ PR title must start with: feat:, fix:, docs:, refactor:, test:, or chore:"
-            exit 1
-          fi
+      - name: Check PR Title Format
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const title = context.payload.pull_request.title;
+            const pattern = /^(feat|fix|docs|refactor|test|chore|perf|ci|build|style)(\(.+\))?:\s.+/;
+            
+            if (!pattern.test(title)) {
+              core.setFailed('❌ PR title must follow conventional commits format: type(scope): description\n\nExamples:\n- feat: add user authentication\n- fix(api): resolve null reference in order controller\n- docs: update README with setup instructions');
+            } else {
+              console.log('✅ PR title format is valid');
+            }
 
       - name: Check PR Size
+        uses: actions/github-script@v7
         id: pr-size
-        run: |
-          FILES_CHANGED=${{ github.event.pull_request.changed_files }}
-          ADDITIONS=${{ github.event.pull_request.additions }}
-          DELETIONS=${{ github.event.pull_request.deletions }}
-          
-          echo "Files changed: $FILES_CHANGED"
-          echo "Lines added: $ADDITIONS"
-          echo "Lines deleted: $DELETIONS"
-          
-          # Warn on large PRs
-          if [ $FILES_CHANGED -gt 20 ] || [ $ADDITIONS -gt 500 ]; then
-            echo "⚠️ Large PR detected. Consider breaking into smaller PRs."
-            echo "size=large" >> $GITHUB_OUTPUT
-          fi
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            const filesChanged = pr.changed_files;
+            const additions = pr.additions;
+            const deletions = pr.deletions;
+            const totalChanges = additions + deletions;
+            
+            console.log(`Files changed: ${filesChanged}`);
+            console.log(`Lines added: ${additions}`);
+            console.log(`Lines deleted: ${deletions}`);
+            console.log(`Total changes: ${totalChanges}`);
+            
+            let size = 'small';
+            let emoji = '✅';
+            let message = 'PR size is appropriate for review';
+            
+            if (filesChanged > 20 || totalChanges > 500) {
+              size = 'large';
+              emoji = '⚠️';
+              message = 'Large PR detected. Consider breaking into smaller PRs for easier review.';
+            } else if (filesChanged > 10 || totalChanges > 300) {
+              size = 'medium';
+              emoji = '📊';
+              message = 'Medium-sized PR. Still manageable for review.';
+            }
+            
+            // Post comment if large
+            if (size === 'large') {
+              await github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: `${emoji} **PR Size Check**\n\n${message}\n\n**Stats:**\n- Files changed: ${filesChanged}\n- Lines added: ${additions}\n- Lines deleted: ${deletions}\n- Total changes: ${totalChanges}\n\n**Recommendation:** PRs under 10 files and 300 lines are easier to review thoroughly.`
+              });
+            }
+            
+            return size;
 
-      - name: Check for Breaking Changes
-        run: |
-          git fetch origin ${{ github.base_ref }}
-          
-          # Check for removed public APIs (breaking changes)
-          BREAKING_CHANGES=$(git diff origin/${{ github.base_ref }}...HEAD -- '*.cs' | grep -E '^\-.*public (class|interface|enum)' || true)
-          
-          if [ -n "$BREAKING_CHANGES" ]; then
-            echo "⚠️ Potential breaking changes detected"
-            echo "$BREAKING_CHANGES"
-            # Post warning comment, but don't block
-          fi
+      - name: Check for Tests
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data: files } = await github.rest.pulls.listFiles({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number,
+            });
+            
+            const codeFiles = files.filter(f => 
+              f.filename.endsWith('.cs') && 
+              !f.filename.includes('Test') &&
+              !f.filename.includes('/obj/') &&
+              !f.filename.includes('/bin/') &&
+              (f.status === 'added' || f.status === 'modified')
+            );
+            
+            const testFiles = files.filter(f => 
+              f.filename.includes('Test') && 
+              f.filename.endsWith('.cs') &&
+              (f.status === 'added' || f.status === 'modified')
+            );
+            
+            console.log(`Code files changed: ${codeFiles.length}`);
+            console.log(`Test files changed: ${testFiles.length}`);
+            
+            if (codeFiles.length > 0 && testFiles.length === 0) {
+              await github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: '⚠️ **Tests Missing**\n\nThis PR modifies code files but doesn\'t include test changes.\n\n**Changed code files:**\n' + 
+                      codeFiles.map(f => `- \`${f.filename}\``).join('\n') +
+                      '\n\nPlease add tests for your changes.'
+              });
+              
+              core.setFailed('Tests are required for code changes');
+            } else if (codeFiles.length > 0 && testFiles.length > 0) {
+              console.log('✅ Tests included with code changes');
+            } else {
+              console.log('ℹ️ No code changes detected (docs/config only)');
+            }
 
-      - name: Require Tests
-        run: |
-          # Check if code changes include test changes
-          CODE_FILES=$(git diff --name-only origin/${{ github.base_ref }}...HEAD | grep -E '\.cs$' | grep -v 'Tests' | wc -l)
-          TEST_FILES=$(git diff --name-only origin/${{ github.base_ref }}...HEAD | grep -E 'Tests.*\.cs$' | wc -l)
-          
-          if [ $CODE_FILES -gt 0 ] && [ $TEST_FILES -eq 0 ]; then
-            echo "❌ Code changes detected without corresponding test changes"
-            echo "Please add tests for your changes"
-            exit 1
-          fi
-
-      - name: Quality Gate Summary
+      - name: Post Summary
         if: always()
         uses: actions/github-script@v7
         with:
           script: |
-            const prSize = '${{ steps.pr-size.outputs.size }}';
-            const emoji = prSize === 'large' ? '⚠️' : '✅';
+            const prSize = '${{ steps.pr-size.outputs.result }}' || 'unknown';
+            const emoji = prSize === 'large' ? '⚠️' : prSize === 'medium' ? '📊' : '✅';
             
-            const body = `## ${emoji} Quality Gate Check
+            const summary = `## ${emoji} PR Quality Gate Check
             
-            **PR Size:** ${prSize || 'normal'}
+            **Status:** ${{ job.status }}
+            **PR Size:** ${prSize}
             
-            ### Requirements
-            - ✅ PR title follows convention
-            - ✅ Tests included with code changes
-            - ✅ No blocking issues detected
+            ### Checks Performed
+            - ✅ PR title format validation
+            - ✅ PR size analysis
+            - ✅ Test coverage verification
             
-            ${prSize === 'large' ? '💡 **Tip:** Consider breaking large PRs into smaller, focused changes for easier review.' : ''}
+            ${prSize === 'large' ? '💡 **Tip:** Smaller PRs are easier to review and merge faster!' : ''}
             `;
             
-            await github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: body
-            });
+            console.log(summary);
