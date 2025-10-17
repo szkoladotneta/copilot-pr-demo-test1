@@ -45,7 +45,6 @@
 
 **Good things in this PR:**
 [Acknowledge what was done well - always find something positive]
-```
 
 ### Example of Educational Comment:
 
