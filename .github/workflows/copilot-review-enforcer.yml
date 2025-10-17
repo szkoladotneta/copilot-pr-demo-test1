@@ -1,13 +1,12 @@
 name: Copilot Review Enforcer
 
 on:
-  pull_request_review_comment:
-    types: [created]
-  # Don't use issue_comment - too noisy
-  schedule:
-    # Fallback: Check every 5 minutes if reviews are pending
-    - cron: '*/5 * * * *'
   workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'PR number to check (leave empty to check all open PRs)'
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -21,45 +20,51 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
-      - name: Get PR Information
-        id: pr-info
+      - name: Determine PR to Check
+        id: get-pr
         uses: actions/github-script@v7
         with:
           script: |
             let prNumber = null;
             
-            if (context.eventName === 'pull_request_review_comment') {
-              prNumber = context.payload.pull_request.number;
-            } else if (context.eventName === 'schedule' || context.eventName === 'workflow_dispatch') {
-              // For scheduled runs, check all open PRs
+            // If PR number provided in input, use that
+            if ('${{ inputs.pr_number }}') {
+              prNumber = parseInt('${{ inputs.pr_number }}');
+              console.log(`Checking PR #${prNumber} (from input)`);
+            } else {
+              // Otherwise, get the most recent open PR
               const { data: prs } = await github.rest.pulls.list({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                state: 'open'
+                state: 'open',
+                sort: 'updated',
+                direction: 'desc',
+                per_page: 1
               });
               
-              // Check the first open PR (or modify to check all)
               if (prs.length > 0) {
                 prNumber = prs[0].number;
-                console.log(`Checking PR #${prNumber}`);
+                console.log(`Checking most recent PR #${prNumber}`);
               }
             }
             
             if (!prNumber) {
-              console.log('No PR to check');
+              core.setFailed('No PR found to check');
               return null;
             }
             
             return prNumber;
 
       - name: Analyze Copilot Review Comments
-        if: steps.pr-info.outputs.result != 'null'
+        if: steps.get-pr.outputs.result != 'null'
         uses: actions/github-script@v7
         with:
           script: |
-            const prNumber = ${{ steps.pr-info.outputs.result }};
+            const prNumber = ${{ steps.get-pr.outputs.result }};
             
-            console.log(`Analyzing PR #${prNumber}`);
+            console.log(`\n========================================`);
+            console.log(`Analyzing Copilot Review for PR #${prNumber}`);
+            console.log(`========================================\n`);
             
             // Get PR review comments (inline code comments)
             const { data: reviewComments } = await github.rest.pulls.listReviewComments({
@@ -68,38 +73,55 @@ jobs:
               pull_number: prNumber,
             });
             
-            console.log(`Total review comments: ${reviewComments.length}`);
+            console.log(`📊 Total review comments found: ${reviewComments.length}\n`);
             
-            // Filter for actual Copilot comments (not "review requested" notifications)
+            // Filter for actual Copilot comments
             const copilotComments = reviewComments.filter(comment => {
               const isCopilotUser = comment.user.login.toLowerCase().includes('copilot') || 
                                    comment.user.type === 'Bot';
               
-              // Make sure it's an actual review comment, not just a notification
+              // Real review comments are substantive
               const hasSubstantiveContent = comment.body && 
-                                           comment.body.length > 50 && // Real reviews are longer
+                                           comment.body.length > 50 &&
                                            !comment.body.includes('requested a review') &&
                                            !comment.body.includes('has been requested');
+              
+              if (isCopilotUser && hasSubstantiveContent) {
+                console.log(`✓ Found Copilot comment: ${comment.body.substring(0, 80)}...`);
+              }
               
               return isCopilotUser && hasSubstantiveContent;
             });
             
-            console.log(`Copilot review comments: ${copilotComments.length}`);
+            console.log(`\n🤖 Copilot review comments: ${copilotComments.length}\n`);
             
-            // If no Copilot comments yet, don't fail - just note it
+            // If no Copilot comments yet
             if (copilotComments.length === 0) {
-              console.log('⏳ Waiting for Copilot to complete review...');
+              console.log('⚠️ No Copilot review comments found yet.\n');
+              console.log('Possible reasons:');
+              console.log('- Copilot has not been added as a reviewer');
+              console.log('- Copilot is still analyzing the code (wait 30-60 seconds)');
+              console.log('- Copilot found no issues to comment on\n');
+              
+              const message = `## ⏳ No Copilot Review Found\n\n` +
+                `**Status:** No Copilot review comments detected for this PR.\n\n` +
+                `**Next Steps:**\n` +
+                `1. Ensure @copilot has been added as a reviewer\n` +
+                `2. Wait 30-60 seconds for Copilot to complete analysis\n` +
+                `3. Re-run this workflow: \`Actions → Copilot Review Enforcer → Run workflow\`\n\n` +
+                `**Note:** If Copilot finds no issues, it may not post any comments. This is good news!`;
               
               await github.rest.issues.createComment({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 issue_number: prNumber,
-                body: `## ⏳ Waiting for Copilot Review\n\nCopilot review has been requested but not yet completed.\n\nThis check will update automatically when Copilot posts review comments.`
+                body: message
               });
               
-              // Don't fail - just exit
-              return;
+              return; // Don't fail, just note it
             }
+            
+            console.log('📋 Analyzing comment severity...\n');
             
             // Analyze the actual review comments
             let criticalIssues = [];
@@ -110,18 +132,19 @@ jobs:
               'sql injection', 'xss', 'cross-site scripting',
               'security vulnerability', 'hardcoded password', 'hardcoded secret',
               'authorization', 'authentication', 'csrf',
-              'password in', 'secret in', 'api key',
+              'password in', 'secret in', 'api key', 'private key',
               'remote code execution', 'path traversal',
-              'insecure', 'vulnerable', 'exploit'
+              'insecure', 'vulnerable', 'exploit',
+              'critical'
             ];
             
             const highPriorityKeywords = [
               'synchronous', 'blocking', 'thread', 'deadlock',
-              'async', 'await', 'tolist()', '.result', '.wait()',
+              'async', 'await', 'tolist()', 'tolistasync', '.result', '.wait(',
               'n+1', 'performance', 'memory leak',
-              'error handling', 'exception', 'try-catch',
+              'error handling', 'exception', 'try-catch', 'try catch',
               'null reference', 'nullreferenceexception',
-              'input validation', 'validate input'
+              'input validation', 'validate input', 'validation'
             ];
             
             const suggestionKeywords = [
@@ -135,70 +158,67 @@ jobs:
               const firstLine = comment.body.split('\n')[0];
               
               // Check for explicit emoji markers first
-              if (body.includes('🔴') || firstLine.toLowerCase().includes('critical')) {
+              if (body.includes('🔴') || firstLine.toLowerCase().includes('critical:')) {
+                console.log(`🔴 CRITICAL: ${firstLine.substring(0, 80)}`);
                 criticalIssues.push({
                   url: comment.html_url,
                   snippet: firstLine.substring(0, 100),
-                  body: comment.body
+                  body: comment.body,
+                  line: comment.line
                 });
               }
-              else if (body.includes('🟠') || firstLine.toLowerCase().includes('high priority')) {
+              else if (body.includes('🟠') || firstLine.toLowerCase().includes('high priority:')) {
+                console.log(`🟠 HIGH: ${firstLine.substring(0, 80)}`);
                 highPriorityIssues.push({
                   url: comment.html_url,
                   snippet: firstLine.substring(0, 100),
-                  body: comment.body
+                  body: comment.body,
+                  line: comment.line
                 });
               }
               // Then check for keywords
               else if (criticalKeywords.some(keyword => body.includes(keyword))) {
+                console.log(`🔴 CRITICAL (keyword): ${firstLine.substring(0, 80)}`);
                 criticalIssues.push({
                   url: comment.html_url,
                   snippet: firstLine.substring(0, 100),
                   body: comment.body,
-                  detectedBy: 'keyword'
+                  detectedBy: 'keyword',
+                  line: comment.line
                 });
               }
               else if (highPriorityKeywords.some(keyword => body.includes(keyword))) {
+                console.log(`🟠 HIGH (keyword): ${firstLine.substring(0, 80)}`);
                 highPriorityIssues.push({
                   url: comment.html_url,
                   snippet: firstLine.substring(0, 100),
                   body: comment.body,
-                  detectedBy: 'keyword'
+                  detectedBy: 'keyword',
+                  line: comment.line
                 });
               }
               else if (suggestionKeywords.some(keyword => body.includes(keyword))) {
+                console.log(`💡 SUGGESTION: ${firstLine.substring(0, 80)}`);
                 suggestions.push({
                   url: comment.html_url,
-                  snippet: firstLine.substring(0, 100)
+                  snippet: firstLine.substring(0, 100),
+                  line: comment.line
                 });
               }
               else {
-                // Default to suggestion if can't categorize
+                console.log(`💡 SUGGESTION (default): ${firstLine.substring(0, 80)}`);
                 suggestions.push({
                   url: comment.html_url,
-                  snippet: firstLine.substring(0, 100)
+                  snippet: firstLine.substring(0, 100),
+                  line: comment.line
                 });
               }
             });
             
-            console.log(`Critical: ${criticalIssues.length}`);
-            console.log(`High Priority: ${highPriorityIssues.length}`);
-            console.log(`Suggestions: ${suggestions.length}`);
-            
-            // Log what we found
-            if (criticalIssues.length > 0) {
-              console.log('\nCritical Issues Found:');
-              criticalIssues.forEach((issue, i) => {
-                console.log(`${i + 1}. ${issue.snippet}`);
-              });
-            }
-            
-            if (highPriorityIssues.length > 0) {
-              console.log('\nHigh Priority Issues Found:');
-              highPriorityIssues.forEach((issue, i) => {
-                console.log(`${i + 1}. ${issue.snippet}`);
-              });
-            }
+            console.log(`\n📊 Final Breakdown:`);
+            console.log(`   🔴 Critical: ${criticalIssues.length}`);
+            console.log(`   🟠 High Priority: ${highPriorityIssues.length}`);
+            console.log(`   💡 Suggestions: ${suggestions.length}\n`);
             
             // Create detailed status message
             const statusIcon = criticalIssues.length > 0 ? '❌' : 
@@ -207,66 +227,88 @@ jobs:
                               highPriorityIssues.length > 3 ? 'NEEDS ATTENTION' : 'APPROVED';
             
             let statusMessage = `## ${statusIcon} Copilot Review Status: ${statusText}\n\n`;
-            statusMessage += `**Review Complete:** ${copilotComments.length} substantive comment(s) from Copilot\n\n`;
+            statusMessage += `**Review Complete:** ${copilotComments.length} comment(s) analyzed\n\n`;
             statusMessage += `**Issue Breakdown:**\n`;
-            statusMessage += `- 🔴 **Critical:** ${criticalIssues.length} ${criticalIssues.length > 0 ? '(MUST FIX)' : ''}\n`;
-            statusMessage += `- 🟠 **High Priority:** ${highPriorityIssues.length} ${highPriorityIssues.length > 3 ? '(Should address)' : ''}\n`;
+            statusMessage += `- 🔴 **Critical:** ${criticalIssues.length} ${criticalIssues.length > 0 ? '← **MUST FIX**' : ''}\n`;
+            statusMessage += `- 🟠 **High Priority:** ${highPriorityIssues.length} ${highPriorityIssues.length > 3 ? '← **Should address**' : ''}\n`;
             statusMessage += `- 💡 **Suggestions:** ${suggestions.length}\n\n`;
             
             // Add details for critical issues
             if (criticalIssues.length > 0) {
-              statusMessage += `### ❌ Merge Blocked - Critical Issues\n\n`;
-              statusMessage += `The following critical issues must be resolved:\n\n`;
+              statusMessage += `### ❌ Merge Blocked - Critical Issues Found\n\n`;
+              statusMessage += `**The following critical issues must be resolved before merging:**\n\n`;
               criticalIssues.forEach((issue, i) => {
-                statusMessage += `${i + 1}. [${issue.snippet}](${issue.url})\n`;
+                statusMessage += `${i + 1}. 🔴 [${issue.snippet}](${issue.url})\n`;
               });
-              statusMessage += `\n**Action Required:** Fix all critical issues before requesting human review.\n\n`;
+              statusMessage += `\n**Action Required:** Fix all critical issues and re-run this check.\n\n`;
+              statusMessage += `---\n\n`;
             }
             
             // Add details for high priority issues
             if (highPriorityIssues.length > 0) {
               statusMessage += `### 🟠 High Priority Issues\n\n`;
               if (highPriorityIssues.length > 3) {
-                statusMessage += `**Warning:** ${highPriorityIssues.length} high-priority issues detected. While not blocking, these should be addressed.\n\n`;
+                statusMessage += `⚠️ **${highPriorityIssues.length} high-priority issues** detected. While not blocking, these should be addressed for production quality.\n\n`;
               }
-              statusMessage += `<details>\n<summary>View High Priority Issues (${highPriorityIssues.length})</summary>\n\n`;
-              highPriorityIssues.slice(0, 10).forEach((issue, i) => {
-                statusMessage += `${i + 1}. [${issue.snippet}](${issue.url})\n`;
+              statusMessage += `<details>\n<summary>View ${highPriorityIssues.length} High Priority Issue(s)</summary>\n\n`;
+              highPriorityIssues.forEach((issue, i) => {
+                statusMessage += `${i + 1}. 🟠 [${issue.snippet}](${issue.url})\n`;
               });
-              if (highPriorityIssues.length > 10) {
-                statusMessage += `\n... and ${highPriorityIssues.length - 10} more\n`;
-              }
               statusMessage += `\n</details>\n\n`;
+              statusMessage += `---\n\n`;
             }
             
             // Add suggestions
             if (suggestions.length > 0) {
-              statusMessage += `### 💡 Suggestions for Improvement\n\n`;
-              statusMessage += `Copilot provided ${suggestions.length} suggestion(s) that could improve code quality.\n\n`;
+              statusMessage += `### 💡 Code Improvement Suggestions\n\n`;
+              statusMessage += `Copilot provided **${suggestions.length} suggestion(s)** for code quality improvements.\n\n`;
+              statusMessage += `<details>\n<summary>View Suggestions</summary>\n\n`;
+              suggestions.slice(0, 10).forEach((issue, i) => {
+                statusMessage += `${i + 1}. 💡 [${issue.snippet}](${issue.url})\n`;
+              });
+              if (suggestions.length > 10) {
+                statusMessage += `\n_...and ${suggestions.length - 10} more suggestions_\n`;
+              }
+              statusMessage += `\n</details>\n\n`;
+              statusMessage += `---\n\n`;
             }
             
+            // Add approval message if clean
             if (criticalIssues.length === 0 && highPriorityIssues.length <= 3) {
-              statusMessage += `### ✅ Ready for Review\n\n`;
-              statusMessage += `No blocking issues detected. This PR is ready for human review!\n\n`;
+              statusMessage += `### ✅ Ready for Human Review\n\n`;
+              statusMessage += `✨ **No blocking issues detected!**\n\n`;
+              statusMessage += `This PR has passed automated review and is ready for human approval.\n\n`;
+              statusMessage += `---\n\n`;
             }
             
-            statusMessage += `---\n\n`;
-            statusMessage += `<details>\n<summary>📋 Classification Criteria</summary>\n\n`;
-            statusMessage += `**Critical (Blocks PR):**\n`;
-            statusMessage += `- Security vulnerabilities (SQL injection, XSS, etc.)\n`;
-            statusMessage += `- Hardcoded credentials or secrets\n`;
-            statusMessage += `- Missing authentication/authorization\n`;
-            statusMessage += `- Data integrity risks\n\n`;
-            statusMessage += `**High Priority (Should Fix):**\n`;
-            statusMessage += `- Synchronous I/O operations\n`;
-            statusMessage += `- Missing error handling\n`;
-            statusMessage += `- Performance issues (N+1 queries, etc.)\n`;
-            statusMessage += `- Input validation missing\n\n`;
-            statusMessage += `**Suggestions (Nice to Have):**\n`;
-            statusMessage += `- Code style improvements\n`;
+            // Add classification guide
+            statusMessage += `<details>\n<summary>📋 Issue Classification Guide</summary>\n\n`;
+            statusMessage += `**🔴 Critical (Blocks Merge):**\n`;
+            statusMessage += `- Security vulnerabilities (SQL injection, XSS, CSRF, etc.)\n`;
+            statusMessage += `- Hardcoded credentials, secrets, or API keys\n`;
+            statusMessage += `- Missing authentication/authorization on sensitive endpoints\n`;
+            statusMessage += `- Data integrity or data loss risks\n\n`;
+            statusMessage += `**🟠 High Priority (Should Fix):**\n`;
+            statusMessage += `- Synchronous I/O operations (blocking threads)\n`;
+            statusMessage += `- Missing error handling or exception management\n`;
+            statusMessage += `- Performance issues (N+1 queries, memory leaks)\n`;
+            statusMessage += `- Missing input validation\n`;
+            statusMessage += `- Null reference vulnerabilities\n\n`;
+            statusMessage += `**💡 Suggestions (Nice to Have):**\n`;
+            statusMessage += `- Code style and readability improvements\n`;
             statusMessage += `- Refactoring opportunities\n`;
             statusMessage += `- Documentation additions\n`;
-            statusMessage += `\n</details>`;
+            statusMessage += `- Naming convention improvements\n`;
+            statusMessage += `\n</details>\n\n`;
+            
+            // Add re-run instructions
+            statusMessage += `---\n\n`;
+            statusMessage += `**To re-run this check after making changes:**\n`;
+            statusMessage += `1. Go to \`Actions\` tab\n`;
+            statusMessage += `2. Select \`Copilot Review Enforcer\`\n`;
+            statusMessage += `3. Click \`Run workflow\`\n`;
+            statusMessage += `4. Select this PR's branch\n`;
+            statusMessage += `5. Click \`Run workflow\` button`;
             
             // Post or update the status comment
             const { data: existingComments } = await github.rest.issues.listComments({
@@ -277,7 +319,7 @@ jobs:
             
             const botComment = existingComments.find(c => 
               c.user.login === 'github-actions[bot]' && 
-              (c.body.includes('Copilot Review Status') || c.body.includes('Waiting for Copilot Review'))
+              (c.body.includes('Copilot Review Status') || c.body.includes('No Copilot Review Found'))
             );
             
             if (botComment) {
@@ -287,7 +329,7 @@ jobs:
                 comment_id: botComment.id,
                 body: statusMessage
               });
-              console.log('✅ Updated status comment');
+              console.log('✅ Updated existing status comment');
             } else {
               await github.rest.issues.createComment({
                 owner: context.repo.owner,
@@ -295,12 +337,15 @@ jobs:
                 issue_number: prNumber,
                 body: statusMessage
               });
-              console.log('✅ Created status comment');
+              console.log('✅ Created new status comment');
             }
             
             // Set workflow status
             if (criticalIssues.length > 0) {
+              console.log(`\n❌ WORKFLOW FAILED: ${criticalIssues.length} critical issue(s) found`);
               core.setFailed(`❌ ${criticalIssues.length} critical issue(s) must be resolved before merging.`);
             } else {
-              console.log(`✅ No critical issues found. High: ${highPriorityIssues.length}, Suggestions: ${suggestions.length}`);
+              console.log(`\n✅ WORKFLOW PASSED: No critical issues`);
+              console.log(`   High Priority: ${highPriorityIssues.length}`);
+              console.log(`   Suggestions: ${suggestions.length}`);
             }
