@@ -472,7 +472,7 @@ This reduces to a single query with a SQL JOIN.
 
 **❌ Bad (Not Educational):**
 
-**✅ Good (Educational):**
+> Missing async/await. Fix this.
 
 🟠 High Priority: Missing Async/Await
 
